@@ -10,25 +10,25 @@
 import UIKit
 
 class ToDoListViewController: UITableViewController {
-    
-    let defaults = UserDefaults.standard
 
-    var itemArray = ["Find Mike", "Buy Eggos", "Destroy Demogorgon"]
+    var taskArray = [Task]()
+    
+    let dataFilePath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent("tasks.plist")
     
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        if let items = defaults.array(forKey: "TodoListArray") as? [String] {
-            itemArray = items
+        print(dataFilePath!)
+        
+        loadItems()
         }
-    }
-
+        
     // Methods for what the cells should display, and for how many rows are required
     
     //How many rows will be displayed:
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         
-        return itemArray.count
+        return taskArray.count
         
     }
     
@@ -37,7 +37,11 @@ class ToDoListViewController: UITableViewController {
         
         let cell = tableView.dequeueReusableCell(withIdentifier: "ToDoItemCell", for : indexPath)
         
-        cell.textLabel?.text = itemArray[indexPath.row]
+        let task = taskArray[indexPath.row]
+        
+        cell.textLabel?.text = task.title
+        
+        cell.accessoryType = task.done ? .checkmark : .none
         
         return cell
     }
@@ -45,17 +49,11 @@ class ToDoListViewController: UITableViewController {
     //What to do when a cell is selected/tapped
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         
-        if tableView.cellForRow(at: indexPath)?.accessoryType == .checkmark {
-            
-            tableView.cellForRow(at: indexPath)?.accessoryType = .none
-        }
-        else{
-            tableView.cellForRow(at: indexPath)?.accessoryType = .checkmark
-        }
+        taskArray[indexPath.row].done = !taskArray[indexPath.row].done
         
         tableView.deselectRow(at: indexPath, animated: true)
         
-        print(itemArray[indexPath.row])
+        saveItems()
         
     }
     
@@ -68,11 +66,11 @@ class ToDoListViewController: UITableViewController {
         //What happens when user presses Add button:
         let action = UIAlertAction(title: "Add", style: .default) { (action) in
             
-            self.itemArray.append(textField.text!)
+            let newTask = Task(title: textField.text!)
             
-            self.defaults.set(self.itemArray, forKey: "TodoListArray")
+            self.taskArray.append(newTask)
             
-            self.tableView.reloadData()
+           self.saveItems()
             
         }
         
@@ -88,6 +86,33 @@ class ToDoListViewController: UITableViewController {
         
     }
     
+    func saveItems(){
+        let encoder = PropertyListEncoder()
+        
+        do{
+            let data = try encoder.encode(taskArray)
+            try data.write(to: dataFilePath!)
+        }
+        catch{
+            print("Error encoding task array, \(error)")
+        }
+        
+        self.tableView.reloadData()
+    }
+    
+    func loadItems(){
+        
+        if let data = try? Data(contentsOf: dataFilePath!){
+            let decoder = PropertyListDecoder()
+            do{
+                taskArray = try decoder.decode([Task].self, from: data)
+            }
+            catch{
+                print("\(error)")
+            }
+        }
+        
+    }
 
 }
 
