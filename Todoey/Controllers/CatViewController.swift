@@ -8,12 +8,21 @@
 
 import UIKit
 import CoreData
+import RealmSwift
+import Realm
 
 class CatViewController: UITableViewController {
+    
+    //MARK: - Variables
+    
+    let realm = try! Realm()
 
-    var catArray = [Cat]()
+    var cats : Results<Cat>?
     
     let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
+    
+    
+    // MARK: - Upon loading...
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -21,11 +30,14 @@ class CatViewController: UITableViewController {
         loadCats()
     }
 
+    
     // MARK: - Table view datasource method
     
     // # of rows
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return catArray.count
+       
+        //Return optional cats?.count, if it IS NIL, then instead return value after "??" X
+        return cats?.count ?? 1
     }
     
     //What to display in cells
@@ -33,9 +45,7 @@ class CatViewController: UITableViewController {
         
         let cell = tableView.dequeueReusableCell(withIdentifier: "CatCell", for: indexPath)
         
-        let cat = catArray[indexPath.row]
-        
-        cell.textLabel?.text = cat.name
+        cell.textLabel?.text = cats?[indexPath.row].name ?? "No categories added yet"
         
         return cell
     }
@@ -54,13 +64,11 @@ class CatViewController: UITableViewController {
         //What happens when add button is pressed
         let action = UIAlertAction(title: "Add", style: .default) { (action) in
             
-            let newCat = Cat(context: self.context)
+            let newCat = Cat()
             
-            newCat.name = textField.text
+            newCat.name = textField.text!
             
-            self.catArray.append(newCat)
-            
-            self.saveCats()
+            self.save(category: newCat)
         }
         
         alert.addAction(action)
@@ -81,31 +89,39 @@ class CatViewController: UITableViewController {
     
     // MARK: - Data manipulation methods, save and load
     
-    func saveCats(){
+    func save(category : Cat){
         
         do{
-            try context.save()
+            try realm.write {
+                realm.add(category)
+            }
         }
         catch{
             print("Error saving categories \(error)")
         }
         
-        self.tableView.reloadData()
+        tableView.reloadData()
     }
     
-//    Default parameters can be declared with an = after declaring parameter type
-//       params?? with request : NSFetchRequest<Cat> = Task.fetchRequest()
-        func loadCats() {
 
-        let request : NSFetchRequest<Cat> = Cat.fetchRequest()
+    func loadCats() {
+
+    cats = realm.objects(Cat.self)
+        
+    tableView.reloadData()      // reloadData calls data source methods
+
+//    Default parameters can be declared with an = after declaring parameter type
+//    with request : NSFetchRequest<Cat> = Task.fetchRequest()
             
-        do{
-            catArray = try context.fetch(request)
-        }
-        catch{
-            print("Error loading context \(error)")
-        }
-        tableView.reloadData()
+//        Core data instructions:
+//        let request : NSFetchRequest<Cat> = Cat.fetchRequest()
+//
+//        do{
+//            catArray = try context.fetch(request)
+//        }
+//        catch{
+//            print("Error loading context \(error)")
+//        }
     }
     
     // MARK: -  Tableview delegate methods
@@ -120,7 +136,7 @@ class CatViewController: UITableViewController {
         let destinationVC = segue.destination as! ToDoListViewController
         
         if let indexPath = tableView.indexPathForSelectedRow {
-            destinationVC.selectedCategory = catArray[indexPath.row] 
+            destinationVC.selectedCategory = cats?[indexPath.row]
         }
     }
     

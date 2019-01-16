@@ -8,11 +8,13 @@
 
 
 import UIKit
-import CoreData
+import RealmSwift
 
 class ToDoListViewController: UITableViewController{
 
-    var taskArray = [Task]()
+    var tasks : Results<Task>?
+    
+    let realm = try! Realm()
     
     var selectedCategory : Cat? {
         didSet{
@@ -20,7 +22,8 @@ class ToDoListViewController: UITableViewController{
         }
     }
     
-    let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
+    // CONTEXT USED IN CORE DATA PERSISTENT CONTAINER
+    //let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -29,6 +32,7 @@ class ToDoListViewController: UITableViewController{
         
         print(FileManager.default.urls(for: .documentDirectory, in: .userDomainMask))
 
+        loadTasks()
         }
     
     //IB Outlets:
@@ -43,8 +47,7 @@ class ToDoListViewController: UITableViewController{
         
         print(FileManager.default.urls(for: .documentDirectory, in: .userDomainMask))
         
-        return taskArray.count
-        
+        return tasks?.count ?? 1
     }
     
     //What the cells should display:
@@ -52,28 +55,43 @@ class ToDoListViewController: UITableViewController{
         
         let cell = tableView.dequeueReusableCell(withIdentifier: "TaskCell", for : indexPath)
         
-        let task = taskArray[indexPath.row]
-        
-        cell.textLabel?.text = task.title
-        
-        cell.accessoryType = task.done ? .checkmark : .none
-        
+        if let task = tasks?[indexPath.row]{
+            cell.textLabel?.text = task.title
+            
+            cell.accessoryType = task.done ? .checkmark : .none
+        }
+        else{
+            cell.textLabel?.text = "No items added"
+        }
         return cell
     }
     
     //Delegate methods
     //What to do when a cell is selected/tapped
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-         
+        
+        //if item is not nil...
+        if let task = tasks?[indexPath.row] {
+            do{
+                try realm.write {
+//                    realm.delete(task)
+                    task.done = !task.done
+                }
+            }
+            catch{
+                print("Error saving done status of task \(error)")
+            }
+        }
+        
+        //Core data stuff:
 //        context.delete(taskArray[indexPath.row])
 //
 //        taskArray.remove(at: indexPath.row)
-        
-        taskArray[indexPath.row].done = !taskArray[indexPath.row].done
+      
         
         tableView.deselectRow(at: indexPath, animated: true)
         
-        saveTasks()
+        tableView.reloadData()
         
     }
     
@@ -86,18 +104,21 @@ class ToDoListViewController: UITableViewController{
         //What happens when user presses Add button:
         let action = UIAlertAction(title: "Add", style: .default) { (action) in
             
-            let newTask = Task(context: self.context)
+            if let currentCat = self.selectedCategory {
+                do{
+                    try self.realm.write {
+                        let newTask = Task()
+                        newTask.title = textField.text!
+                        newTask.dateCreated = Date()
+                        currentCat.tasks.append(newTask)
+                    }
+                }
+                catch{
+                    print("Error saving new tasks \(error)")
+                }
+            }
             
-            newTask.title = textField.text
-            
-            newTask.done = false
-            
-            newTask.parentCategory = self.selectedCategory
-            
-            self.taskArray.append(newTask)
-            
-           self.saveTasks()
-            
+            self.tableView.reloadData()
         }
         
         alert.addAction(action)
@@ -116,32 +137,29 @@ class ToDoListViewController: UITableViewController{
     
     func saveTasks(){
         
-        do{
-            try context.save()
-        }
-        catch{
-            print("Error saving context     \(error)")
-        }
-    
-        self.tableView.reloadData()
+        
     }
     
-    func loadTasks(with request: NSFetchRequest<Task> = Task.fetchRequest(), predicate : NSPredicate? = nil){
+    func loadTasks(){
         
-        let categoryPredicate = NSPredicate(format: "parentCategory.name CONTAINS %@", selectedCategory!.name!)
+        tasks = selectedCategory?.tasks.sorted(byKeyPath: "title", ascending: true)
         
-        if let additionalPredicate = predicate {
-            request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [categoryPredicate, additionalPredicate])
-        }
-        else{
-            request.predicate = categoryPredicate
-        }
-        
-        do{
-          taskArray = try  context.fetch(request)
-          }
-        catch{print("Error loading context \(error)")}
-        
+
+        //Core data code:
+//        let categoryPredicate = NSPredicate(format: "parentCategory.name CONTAINS %@", selectedCategory!.name!)
+//
+//        if let additionalPredicate = predicate {
+//            request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [categoryPredicate, additionalPredicate])
+//        }
+//        else{
+//            request.predicate = categoryPredicate
+//        }
+//
+//        do{
+//          taskArray = try  context.fetch(request)
+//          }
+//        catch{print("Error loading context \(error)")}
+
         tableView.reloadData()
 
     }
@@ -153,15 +171,19 @@ class ToDoListViewController: UITableViewController{
 extension ToDoListViewController : UISearchBarDelegate {
     
     func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
+
+        tasks = tasks?.filter("title CONTAINS[cd] %@", searchBar.text!).sorted(byKeyPath: "dateCreated", ascending: true)
         
-        let request : NSFetchRequest<Task> = Task.fetchRequest()
-        
-        let predicate = NSPredicate(format: "title CONTAINS[cd] %@", searchBar.text!)       //[IGNORE PARAMETERS - c : case, d : diacritic]
-        
-        request.sortDescriptors = [NSSortDescriptor(key: "title", ascending: true)]
-        
-        loadTasks(with: request, predicate: predicate)
-        
+        tableView.reloadData()
+        //Core data stuff:
+//        let request : NSFetchRequest<Task> = Task.fetchRequest()
+//
+//        let predicate = NSPredicate(format: "title CONTAINS[cd] %@", searchBar.text!)       //[IGNORE PARAMETERS - c : case, d : diacritic]
+//
+//        request.sortDescriptors = [NSSortDescriptor(key: "title", ascending: true)]
+//
+//        loadTasks(with: request, predicate: predicate)
+
     }
     
     func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
